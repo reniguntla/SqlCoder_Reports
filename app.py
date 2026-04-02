@@ -1,4 +1,5 @@
 import os
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -166,8 +167,33 @@ Question:
 """.strip()
 
     response = client.generate(model=model, prompt=prompt, options={"temperature": 0})
-    sql = response["response"].strip()
-    return sql
+    raw = response["response"].strip()
+    return normalize_generated_sql(raw)
+
+
+def normalize_generated_sql(raw: str) -> str:
+    """Clean model artifacts and keep only the first SQL statement."""
+    text = raw.strip()
+
+    # Remove common markdown code fences.
+    text = re.sub(r"```(?:sql)?", "", text, flags=re.IGNORECASE).strip()
+
+    # Remove common SLM control artifacts.
+    text = re.sub(r"</?s>", "", text, flags=re.IGNORECASE).strip()
+
+    # Keep only content beginning with SELECT or WITH.
+    match = re.search(r"\b(SELECT|WITH)\b", text, flags=re.IGNORECASE)
+    if match:
+        text = text[match.start() :].strip()
+
+    # Keep only the first SQL statement if multiple are present.
+    statements = sqlparse.split(text)
+    if statements:
+        text = statements[0].strip()
+
+    # Drop any leading punctuation/noise (e.g., "?").
+    text = re.sub(r"^[^\w(]+", "", text).strip()
+    return text
 
 
 def validate_read_only_sql(sql: str) -> tuple[bool, str]:
