@@ -1,0 +1,6 @@
+streamlit>=1.35
+psycopg[binary]>=3.2
+pandas>=2.2
+ollama>=0.3
+python-dotenv>=1.0
+sqlparse>=0.5
