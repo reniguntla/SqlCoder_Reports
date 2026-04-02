@@ -257,7 +257,7 @@ def init_state() -> None:
 
 def main() -> None:
     st.set_page_config(page_title="SQLCoder Reports", page_icon="🧠", layout="wide")
-    st.title("🧠 Natural Language to PostgreSQL (SQLCoder + Ollama)")
+    st.title("Natural Language to PostgreSQL")
     st.caption("Ask questions in plain English. The app generates SQL, executes it safely (read-only), and explains the results.")
 
     init_state()
