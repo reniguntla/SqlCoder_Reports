@@ -45,14 +45,14 @@ def get_model_config() -> ModelConfig:
     )
 
 
-def get_connection(cfg: DBConfig) -> psycopg.Connection:
+def get_connection(cfg: DBConfig, schema: str = "public") -> psycopg.Connection:
     return psycopg.connect(
         host=cfg.host,
         port=cfg.port,
         user=cfg.user,
         password=cfg.password,
         dbname=cfg.dbname,
-        options="-c default_transaction_read_only=on",
+        options=f"-c default_transaction_read_only=on -c search_path={schema}",
         autocommit=True,
     )
 
@@ -137,7 +137,7 @@ def schema_context(conn: psycopg.Connection, schema: str = "public") -> str:
 
     lines: list[str] = []
     for table, cols in grouped.items():
-        lines.append(f"Table: {table}")
+        lines.append(f"Table: {schema}.{table}")
         lines.append(f"Description: {cols[0][1] or 'N/A'}")
         lines.append(f"Primary keys: {cols[0][5] or 'N/A'}")
         lines.append(f"Foreign keys: {cols[0][6] or 'N/A'}")
@@ -149,7 +149,7 @@ def schema_context(conn: psycopg.Connection, schema: str = "public") -> str:
     return "\n".join(lines)
 
 
-def generate_sql(client: Client, model: str, question: str, schema_text: str) -> str:
+def generate_sql(client: Client, model: str, question: str, schema_text: str, db_schema: str) -> str:
     prompt = f"""
 You are a PostgreSQL expert.
 Generate exactly one safe, read-only SQL query for the question.
@@ -158,6 +158,7 @@ Rules:
 - Allowed statements: SELECT or WITH ... SELECT.
 - Never use INSERT, UPDATE, DELETE, DROP, ALTER, TRUNCATE, CREATE, GRANT, REVOKE, COPY.
 - Use LIMIT when user asks for top/listing where appropriate.
+- Always use schema-qualified table names with `{db_schema}.<table_name>` in FROM/JOIN clauses.
 
 Schema:
 {schema_text}
@@ -256,7 +257,7 @@ def init_state() -> None:
 
 def main() -> None:
     st.set_page_config(page_title="SQLCoder Reports", page_icon="🧠", layout="wide")
-    st.title("🧠 Natural Language to PostgreSQL (SQLCoder + Ollama)")
+    st.title("Natural Language to PostgreSQL")
     st.caption("Ask questions in plain English. The app generates SQL, executes it safely (read-only), and explains the results.")
 
     init_state()
@@ -279,12 +280,12 @@ def main() -> None:
     if st.button("Submit", type="primary") and question.strip():
         try:
             ollama_client = Client(host=model_cfg.host)
-            with get_connection(db_cfg) as conn:
+            with get_connection(db_cfg, schema=db_schema) as conn:
                 with st.spinner("Reading schema metadata..."):
                     schema_text = schema_context(conn, schema=db_schema)
 
                 with st.spinner("Generating SQL with SQLCoder..."):
-                    generated_sql = generate_sql(ollama_client, model_cfg.model, question, schema_text)
+                    generated_sql = generate_sql(ollama_client, model_cfg.model, question, schema_text, db_schema)
 
                 valid, message = validate_read_only_sql(generated_sql)
                 if not valid:
